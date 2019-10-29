@@ -1,0 +1,5 @@
+0. Fix the lying comment in ABO.h
+ - is TO a JSObject or a NativeObject? I think a JSObject.
+ - in which case, why ever pretend it is a subclass of ABVO??
+1. Make ABVO, with no new members, be a base class of everything. But don't make is<ABVO> return true for TO yet.
+2. Audit what all the JS_* apis do for TOs. Make them do the right thing.

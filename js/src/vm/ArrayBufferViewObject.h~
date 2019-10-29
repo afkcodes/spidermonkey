@@ -1,0 +1,153 @@
+/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 4 -*-
+ * vim: set ts=8 sts=4 et sw=4 tw=99:
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#ifndef vm_ArrayBufferViewObject_h
+#define vm_ArrayBufferViewObject_h
+
+#include "jsobj.h"
+
+#include "gc/Barrier.h"
+#include "js/Class.h"
+#include "vm/ArrayBufferObject.h"
+
+namespace js {
+
+/*
+ * TypedArrayObject and SharedTypedArrayObject are unrelated types in
+ * both C++ and JS, and that is deliberate to avoid one substituting
+ * for the other.  However, they share a fixed representation and have
+ * some variable attributes, all of which are encapsulated in the
+ * TypedArrayLayout class.  The sharing avoids a lot of pointless
+ * duplication in the JITs: one code path can be used, with occasional
+ * decision points based on the attributes.
+ */
+
+class TypedArrayLayout
+{
+    const bool isShared_;
+    const bool isNeuterable_;
+    const Class* firstClass_;
+    const Class* maxClass_;
+
+  public:
+    MOZ_CONSTEXPR TypedArrayLayout(bool isShared, bool isNeuterable,
+                                   const Class* firstClass, const Class* maxClass)
+        : isShared_(isShared)
+        , isNeuterable_(isNeuterable)
+        , firstClass_(firstClass)
+        , maxClass_(maxClass)
+    {}
+
+    // Underlying (Shared)ArrayBufferObject.
+    static const size_t BUFFER_SLOT = 0;
+    static_assert(BUFFER_SLOT == JS_TYPEDARRAYLAYOUT_BUFFER_SLOT,
+                  "self-hosted code with burned-in constants must get the "
+                  "right buffer slot");
+
+    // Slot containing length of the view in number of typed elements.
+    static const size_t LENGTH_SLOT = 1;
+    static_assert(LENGTH_SLOT == JS_TYPEDARRAYLAYOUT_LENGTH_SLOT,
+                  "self-hosted code with burned-in constants must get the "
+                  "right length slot");
+
+    // Offset of view within underlying (Shared)ArrayBufferObject.
+    static const size_t BYTEOFFSET_SLOT = 2;
+    static_assert(BYTEOFFSET_SLOT == JS_TYPEDARRAYLAYOUT_BYTEOFFSET_SLOT,
+                  "self-hosted code with burned-in constants must get the "
+                  "right byteOffset slot");
+
+    static const size_t RESERVED_SLOTS = 3;
+
+    // The raw pointer to the buffer memory, the "private" value.
+    //
+    // This offset is exposed for performance reasons - so that it
+    // need not be looked up on accesses.
+    static const size_t DATA_SLOT = 3;
+
+    static int lengthOffset();
+    static int dataOffset();
+
+    bool isSharedMemory() const { return isShared_; }
+    bool isNeuterable() const { return isNeuterable_; }
+    const Class* addressOfFirstClass() const { return firstClass_; }
+    const Class* addressOfMaxClass() const { return maxClass_; }
+
+  protected:
+    static_assert(js::detail::TypedArrayLengthSlot == LENGTH_SLOT,
+                  "bad inlined constant in jsfriendapi.h");
+};
+
+/*
+ * ArrayBufferViewObject
+ *
+ * Common definitions shared by all array buffer views.
+ */
+
+class ArrayBufferViewObject : public NativeObject
+{
+  public:
+    template<typename Holder, Value ValueGetter(Holder* tarr)>
+    static bool
+    CallArgsGetter(JSContext* cx, CallArgs args)
+    {
+        args.rval().set(ValueGetter(&args.thisv().toObject().as<Holder>()));
+        return true;
+    }
+
+    // ValueGetter is a function that takes an unwrapped typed array object and
+    // returns a Value. Given such a function, Getter<> is a native that
+    // retrieves a given Value, probably from a slot on the object.
+    template<bool CheckType(HandleValue val), typename Holder, Value ValueGetter(Holder* tarr)>
+    static bool
+    Getter(JSContext* cx, unsigned argc, Value* vp)
+    {
+        CallArgs args = CallArgsFromVp(argc, vp);
+        return CallNonGenericMethod<CheckType, CallArgsGetter<Holder, ValueGetter>>(cx, args);
+    }
+
+    template<bool CheckType(HandleValue val), typename Holder, Value ValueGetter(Holder* view)>
+    static bool
+    defineGetter(JSContext* cx, PropertyName* name, HandleNativeObject obj);
+
+    static ArrayBufferObject* bufferObject(JSContext* cx, Handle<ArrayBufferViewObject*> obj);
+
+    static Value bufferValue(ArrayBufferViewObject* view) {
+        return view->getFixedSlot(TypedArrayLayout::BUFFER_SLOT);
+    }
+
+    static Value byteOffsetValue(ArrayBufferViewObject* view) {
+        Value v = view->getFixedSlot(TypedArrayLayout::BYTEOFFSET_SLOT);
+        MOZ_ASSERT(v.toInt32() >= 0);
+        return v;
+    }
+
+    uint32_t byteOffset() const {
+        return byteOffsetValue(const_cast<ArrayBufferViewObject*>(this)).toInt32();
+    }
+
+    static Value lengthValue(ArrayBufferViewObject* view) {
+        return view->getFixedSlot(TypedArrayLayout::LENGTH_SLOT);
+    }
+
+    uint32_t length() const {
+        return lengthValue(const_cast<ArrayBufferViewObject*>(this)).toInt32();
+    }
+
+    // Different subclasses manage this differently.
+    uint32_t byteLength() const;
+
+    void neuter(void* newData);
+
+    uint8_t* dataPointer();
+
+    void setDataPointer(uint8_t* data);
+
+    static void trace(JSTracer* trc, JSObject* obj);
+};
+
+} /* namespace js */
+
+#endif // vm_ArrayBufferViewObject_h

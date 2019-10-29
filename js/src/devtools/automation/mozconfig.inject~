@@ -1,0 +1,11 @@
+ac_add_options --disable-tests
+ac_add_options --enable-debug
+ac_add_options --disable-optimize
+ac_add_options --without-intl-api
+ac_add_options --enable-system-ffi
+
+export MOZ_DEBUG_SYMBOLS=1
+
+. $topsrcdir/browser/config/mozconfig
+mk_add_options MOZ_OBJDIR=$topsrcdir/obj-inject
+mk_add_options MOZ_MAKE_FLAGS="-j20 -s"
