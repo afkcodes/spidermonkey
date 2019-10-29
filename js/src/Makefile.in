@@ -175,10 +175,10 @@ endif
 SCRIPTS = $(JS_CONFIG_NAME)
 SDK_BINARY = $(JS_CONFIG_NAME)
 
-$(LIBRARY_NAME).pc: js.pc
+$(JS_CONFIG_NAME).pc: js.pc
 	cp $^ $@
 
-install:: $(LIBRARY_NAME).pc
+install:: $(JS_CONFIG_NAME).pc
 	$(SYSINSTALL) $^ $(DESTDIR)$(libdir)/pkgconfig
 
 install:: js-config.h
