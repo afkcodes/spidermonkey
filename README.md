@@ -1,2 +1,0 @@
-# spidermonkey
-Firefox Spidermonkey Engine
